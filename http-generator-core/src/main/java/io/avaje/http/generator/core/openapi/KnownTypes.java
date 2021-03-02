@@ -42,6 +42,8 @@ class KnownTypes {
     add(new StringType(), String.class, char[].class, CharSequence.class);
     add(new BoolType(), boolean.class);
     add(new BooleanType(), Boolean.class);
+    add(new ShortType(), Short.class);
+    add(new PShortType(), short.class);
     add(new IntType(), int.class);
     add(new IntegerType(), Integer.class);
     add(new PLongType(), long.class);
@@ -98,6 +100,16 @@ class KnownTypes {
     public Schema<?> createSchema() {
       return new BooleanSchema();
     }
+  }
+
+  private class ShortType implements KnownType {
+    @Override
+    public Schema<?> createSchema() { return new IntegerSchema().minimum(new BigDecimal(Short.MIN_VALUE)).maximum(new BigDecimal(Short.MAX_VALUE)); }
+  }
+
+  private class PShortType implements KnownType {
+    @Override
+    public Schema<?> createSchema() { return new IntegerSchema().minimum(new BigDecimal(Short.MIN_VALUE)).maximum(new BigDecimal(Short.MAX_VALUE)).nullable(Boolean.FALSE); }
   }
 
   private class IntType implements KnownType {

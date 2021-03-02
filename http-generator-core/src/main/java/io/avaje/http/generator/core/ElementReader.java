@@ -1,150 +1,36 @@
 package io.avaje.http.generator.core;
 
-import io.avaje.http.api.BeanParam;
-import io.avaje.http.api.Cookie;
-import io.avaje.http.api.Default;
-import io.avaje.http.api.Form;
-import io.avaje.http.api.FormParam;
-import io.avaje.http.api.Header;
-import io.avaje.http.api.QueryParam;
 import io.avaje.http.generator.core.openapi.MethodDocBuilder;
 import io.avaje.http.generator.core.openapi.MethodParamDocBuilder;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import java.lang.annotation.Annotation;
 
-public class ElementReader {
+public class ElementReader extends BaseElementReader<Element> {
 
-  private final ProcessingContext ctx;
-  private final Element element;
-  private final String rawType;
-  private final String shortType;
-  private final TypeHandler typeHandler;
-  private final String varName;
-  private final String snakeName;
-  private final boolean formMarker;
-  private final boolean contextType;
-
-  private String paramName;
-  private ParamType paramType;
-  private boolean impliedParamType;
-  private String paramDefault;
-
-  private boolean notNullKotlin;
-  //private boolean notNullJavax;
 
   ElementReader(Element element, ProcessingContext ctx, ParamType defaultType, boolean formMarker) {
     this(element, Util.typeDef(element.asType()), ctx, defaultType, formMarker);
   }
 
   ElementReader(Element element, String rawType, ProcessingContext ctx, ParamType defaultType, boolean formMarker) {
-    this.ctx = ctx;
-    this.element = element;
-    this.rawType = rawType;
-    this.shortType = Util.shortName(rawType);
-    this.contextType = ctx.platform().isContextType(rawType);
-    this.typeHandler = TypeMap.get(rawType);
-    this.formMarker = formMarker;
-    this.varName = element.getSimpleName().toString();
-    this.snakeName = Util.snakeCase(varName);
-    this.paramName = varName;
-    if (!contextType) {
-      readAnnotations(element, defaultType);
-    } else {
-      paramType = ParamType.CONTEXT;
-    }
-  }
-
-  private void readAnnotations(Element element, ParamType defaultType) {
-
-    notNullKotlin = (element.getAnnotation(org.jetbrains.annotations.NotNull.class) != null);
-    //notNullJavax = (element.getAnnotation(javax.validation.constraints.NotNull.class) != null);
-
-    Default defaultVal = element.getAnnotation(Default.class);
-    if (defaultVal != null) {
-      this.paramDefault = defaultVal.value();
-    }
-    Form form = element.getAnnotation(Form.class);
-    if (form != null) {
-      this.paramType = ParamType.FORM;
-      return;
-    }
-    BeanParam beanParam = element.getAnnotation(BeanParam.class);
-    if (beanParam != null) {
-      this.paramType = ParamType.BEANPARAM;
-      return;
-    }
-    QueryParam queryParam = element.getAnnotation(QueryParam.class);
-    if (queryParam != null) {
-      this.paramName = nameFrom(queryParam.value(), varName);
-      this.paramType = ParamType.QUERYPARAM;
-      return;
-    }
-    FormParam formParam = element.getAnnotation(FormParam.class);
-    if (formParam != null) {
-      this.paramName = nameFrom(formParam.value(), varName);
-      this.paramType = ParamType.FORMPARAM;
-      return;
-    }
-    Cookie cookieParam = element.getAnnotation(Cookie.class);
-    if (cookieParam != null) {
-      this.paramName = nameFrom(cookieParam.value(), varName);
-      this.paramType = ParamType.COOKIE;
-      this.paramDefault = null;
-      return;
-    }
-    Header headerParam = element.getAnnotation(Header.class);
-    if (headerParam != null) {
-      this.paramName = nameFrom(headerParam.value(), Util.initcapSnake(snakeName));
-      this.paramType = ParamType.HEADER;
-      this.paramDefault = null;
-      return;
-    }
-    if (paramType == null) {
-      this.impliedParamType = true;
-      if (typeHandler != null) {
-        // a scalar type that we know how to convert
-        this.paramType = defaultType;
-      } else {
-        this.paramType = formMarker ? ParamType.FORM : ParamType.BODY;
-      }
-    }
-  }
-
-  @Override
-  public String toString() {
-    return varName + " type:" + rawType + " paramType:" + paramType + " dft:" + paramDefault;
-  }
-
-  private String nameFrom(String name, String defaultName) {
-    if (name != null && !name.isEmpty()) {
-      return name;
-    }
-    return defaultName;
-  }
-
-  public String getVarName() {
-    return varName;
+    super(
+      element,
+      rawType,
+      element.getSimpleName().toString(),  // varName
+      ctx,
+      defaultType,
+      formMarker
+    );
   }
 
   private boolean hasParamDefault() {
     return paramDefault != null && !paramDefault.isEmpty();
   }
 
-  private boolean isPlatformContext() {
-    return contextType;
-  }
-
   private String platformVariable() {
     return ctx.platform().platformVariable(rawType);
-  }
-
-  private String shortType() {
-    if (typeHandler != null) {
-      return typeHandler.shortName();
-    } else {
-      return shortType;
-    }
   }
 
   void addImports(ControllerReader bean) {
@@ -166,15 +52,6 @@ public class ElementReader {
     }
   }
 
-  /**
-   * Build the OpenAPI documentation for this parameter.
-   */
-  void buildApiDocumentation(MethodDocBuilder methodDoc) {
-    if (!isPlatformContext()) {
-      new MethodParamDocBuilder(methodDoc, this).build();
-    }
-  }
-
   void writeValidate(Append writer) {
     if (!isPlatformContext() && typeHandler == null) {
       writer.append("validator.validate(%s);", varName).eol();
@@ -187,6 +64,7 @@ public class ElementReader {
       // no conversion for this parameter
       return;
     }
+
     if (paramType == ParamType.BODY && ctx.platform().isBodyMethodParam()) {
       // body passed as method parameter (Helidon)
       return;
@@ -200,6 +78,11 @@ public class ElementReader {
 
   void setValue(Append writer) {
     setValue(writer, PathSegments.EMPTY, shortType());
+  }
+
+  @Override
+  public <A extends Annotation> A findAnnotation(Class<A> type) {
+    return element.getAnnotation(type);
   }
 
   private boolean setValue(Append writer, PathSegments segments, String shortType) {
@@ -275,23 +158,12 @@ public class ElementReader {
     form.write(writer);
   }
 
-  public ParamType getParamType() {
-    return paramType;
-  }
-
-  public String getParamName() {
-    return paramName;
-  }
-
-  public String getShortType() {
-    return shortType;
-  }
-
-  public String getRawType() {
-    return rawType;
-  }
-
-  public Element getElement() {
-    return element;
+  /**
+   * Build the OpenAPI documentation for this parameter.
+   */
+  void buildApiDocumentation(MethodDocBuilder methodDoc) {
+    if (!isPlatformContext()) {
+      new MethodParamDocBuilder(methodDoc, this).build();
+    }
   }
 }

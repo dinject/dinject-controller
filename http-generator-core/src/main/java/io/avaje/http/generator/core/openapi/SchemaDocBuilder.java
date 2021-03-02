@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 
 import static io.avaje.http.generator.core.Util.typeDef;
 
@@ -44,18 +43,14 @@ class SchemaDocBuilder {
   private final KnownTypes knownTypes;
   private final TypeMirror iterableType;
   private final TypeMirror mapType;
+  private final Map<String, Schema> schemas;
 
-  private final Map<String, Schema> schemas = new TreeMap<>();
-
-  SchemaDocBuilder(Types types, Elements elements) {
+  SchemaDocBuilder(Types types, Elements elements, Map<String, Schema> schemas) {
+    this.schemas = schemas;
     this.types = types;
     this.knownTypes = new KnownTypes();
     this.iterableType = types.erasure(elements.getTypeElement("java.lang.Iterable").asType());
     this.mapType = types.erasure(elements.getTypeElement("java.util.Map").asType());
-  }
-
-  Map<String, Schema> getSchemas() {
-    return schemas;
   }
 
   Content createContent(TypeMirror returnType, String mediaType) {
@@ -122,7 +117,6 @@ class SchemaDocBuilder {
   }
 
   Schema<?> toSchema(TypeMirror type) {
-
     Schema<?> schema = knownTypes.createSchema(typeDef(type));
     if (schema != null) {
       return schema;
@@ -160,7 +154,6 @@ class SchemaDocBuilder {
   }
 
   private Schema<?> buildIterableSchema(TypeMirror type) {
-
     Schema<?> itemSchema = new ObjectSchema().format("unknownIterableType");
 
     if (type.getKind() == TypeKind.DECLARED) {
@@ -176,7 +169,6 @@ class SchemaDocBuilder {
   }
 
   private Schema<?> buildArraySchema(TypeMirror type) {
-
     ArrayType arrayType = types.getArrayType(type);
     Schema<?> itemSchema = toSchema(arrayType.getComponentType());
 
@@ -186,7 +178,6 @@ class SchemaDocBuilder {
   }
 
   private Schema<?> buildMapSchema(TypeMirror type) {
-
     Schema<?> valueSchema = new ObjectSchema().format("unknownMapValueType");
 
     if (type.getKind() == TypeKind.DECLARED) {
@@ -211,7 +202,7 @@ class SchemaDocBuilder {
     return canonicalName;
   }
 
-  private <T> void populateObjectSchema(TypeMirror objectType, Schema<T> objectSchema) {
+  private <T> void populateObjectSchema(TypeMirror objectType, Schema<?> objectSchema) {
     Element element = types.asElement(objectType);
     for (VariableElement field : allFields(element)) {
       Schema<?> propSchema = toSchema(field.asType());
@@ -304,5 +295,4 @@ class SchemaDocBuilder {
     Set<Modifier> modifiers = field.getModifiers();
     return (modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.TRANSIENT));
   }
-
 }

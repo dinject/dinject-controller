@@ -20,7 +20,6 @@ import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
@@ -28,6 +27,8 @@ import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.io.Writer;
+import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -45,8 +46,10 @@ public class DocContext {
   private final Messager messager;
 
   private final Map<String, PathItem> pathMap = new TreeMap<>();
+  private final Map<String, Schema> schemas = new TreeMap<>();
 
   private final SchemaDocBuilder schemaBuilder;
+  private final SchemaDocBuilderClass schemaBuilderClass;
 
   private final OpenAPI openAPI;
 
@@ -55,7 +58,8 @@ public class DocContext {
     this.elements = env.getElementUtils();
     this.filer = env.getFiler();
     this.messager = env.getMessager();
-    this.schemaBuilder = new SchemaDocBuilder(env.getTypeUtils(), env.getElementUtils());
+    this.schemaBuilder = new SchemaDocBuilder(env.getTypeUtils(), env.getElementUtils(), schemas);
+    this.schemaBuilderClass = new SchemaDocBuilderClass(schemas);
     this.openAPI = initOpenAPI();
   }
 
@@ -77,13 +81,21 @@ public class DocContext {
   }
 
   Schema toSchema(String rawType, Element element) {
-    TypeElement typeElement = elements.getTypeElement(rawType);
-    if (typeElement == null) {
-      // primitive types etc
+    // TypeElement typeElement = elements.getTypeElement(rawType);
+    //  if (typeElement == null) {
+    //    primitive types etc
       return schemaBuilder.toSchema(element.asType());
-    } else {
-      return schemaBuilder.toSchema(typeElement.asType());
-    }
+    // } else {
+    // return schemaBuilder.toSchema(element.asType());
+    // }
+  }
+
+  Schema toSchema(Parameter parameter) {
+    return schemaBuilderClass.toSchema(parameter.getType(), parameter.getParameterizedType());
+  }
+
+  Content createContent(Class returnType, ParameterizedType type, String mediaType) {
+    return schemaBuilderClass.createContent(returnType, type, mediaType);
   }
 
   Content createContent(TypeMirror returnType, String mediaType) {
@@ -117,7 +129,7 @@ public class DocContext {
       paths.addPathItem(entry.getKey(), entry.getValue());
     }
 
-    components().setSchemas(schemaBuilder.getSchemas());
+    components().setSchemas(schemas);
     return openAPI;
   }
 
@@ -142,8 +154,7 @@ public class DocContext {
     return tagsItem;
   }
 
-  public void addTagsDefinition(Element element) {
-    Tags tags = element.getAnnotation(Tags.class);
+  public void addTagsDefinition(Tags tags) {
     if(tags == null)
       return;
 
@@ -152,12 +163,19 @@ public class DocContext {
     }
   }
 
-  public void addTagDefinition(Element element){
-    Tag tag = element.getAnnotation(Tag.class);
+  public void addTagsDefinition(Element element) {
+    addTagsDefinition(element.getAnnotation(Tags.class));
+  }
+
+  public void addTagDefinition(Tag tag) {
     if(tag == null)
       return;
 
     openAPI.addTagsItem(createTagItem(tag));
+  }
+
+  public void addTagDefinition(Element element){
+    addTagDefinition(element.getAnnotation(Tag.class));
   }
 
   public void readApiDefinition(Element element) {
@@ -207,5 +225,4 @@ public class DocContext {
   private void logError(Element e, String msg, Object... args) {
     messager.printMessage(Diagnostic.Kind.ERROR, String.format(msg, args), e);
   }
-
 }

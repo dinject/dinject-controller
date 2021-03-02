@@ -1,7 +1,6 @@
 package io.avaje.http.generator.core;
 
 import io.avaje.http.api.Path;
-import io.avaje.http.api.Produces;
 import io.swagger.v3.oas.annotations.Hidden;
 
 import javax.lang.model.element.Element;
@@ -23,16 +22,7 @@ import java.util.TreeSet;
 /**
  * Reads the type information for the Controller (bean).
  */
-public class ControllerReader {
-
-  private final ProcessingContext ctx;
-
-  private final TypeElement beanType;
-
-  private final List<Element> interfaces;
-
-  private final List<ExecutableElement> interfaceMethods;
-
+public class ControllerReader extends BaseControllerReader<TypeElement, Element, ExecutableElement>  {
   private final List<String> roles;
 
   private final List<MethodReader> methods = new ArrayList<>();
@@ -40,11 +30,6 @@ public class ControllerReader {
   private final Set<String> staticImportTypes = new TreeSet<>();
 
   private final Set<String> importTypes = new TreeSet<>();
-
-  /**
-   * The produces media type for the controller. Null implies JSON.
-   */
-  private final String produces;
 
   private final boolean includeValidator;
 
@@ -56,10 +41,7 @@ public class ControllerReader {
   private boolean docHidden;
 
   ControllerReader(TypeElement beanType, ProcessingContext ctx) {
-    this.beanType = beanType;
-    this.ctx = ctx;
-    this.interfaces = initInterfaces();
-    this.interfaceMethods = initInterfaceMethods();
+    super(beanType, ctx);
     this.roles = Util.findRoles(beanType);
     importTypes.add(Constants.GENERATED);
     if (ctx.isOpenApiAvailable()) {
@@ -72,10 +54,9 @@ public class ControllerReader {
     if (includeValidator) {
       importTypes.add(Constants.VALIDATOR);
     }
-    this.produces = initProduces();
   }
 
-  private List<Element> initInterfaces() {
+  protected List<Element> initInterfaces() {
     List<Element> interfaces = new ArrayList<>();
     for (TypeMirror anInterface : beanType.getInterfaces()) {
       final Element ifaceElement = ctx.asElement(anInterface);
@@ -86,7 +67,7 @@ public class ControllerReader {
     return interfaces;
   }
 
-  private List<ExecutableElement> initInterfaceMethods() {
+  protected List<ExecutableElement> initInterfaceMethods() {
     List<ExecutableElement> ifaceMethods = new ArrayList<>();
     for (Element anInterface : interfaces) {
       ifaceMethods.addAll(ElementFilter.methodsIn(anInterface.getEnclosedElements()));
@@ -94,7 +75,7 @@ public class ControllerReader {
     return ifaceMethods;
   }
 
-  private <A extends Annotation> A findAnnotation(Class<A> type) {
+  public <A extends Annotation> A findAnnotation(Class<A> type) {
     A annotation = beanType.getAnnotation(type);
     if (annotation != null) {
       return annotation;
@@ -124,21 +105,12 @@ public class ControllerReader {
     return interfaceMethod.toString().equals(element.toString());
   }
 
-  private String initProduces() {
-    final Produces produces = findAnnotation(Produces.class);
-    return (produces == null) ? null : produces.value();
-  }
-
   private boolean initDocHidden() {
     return findAnnotation(Hidden.class) != null;
   }
 
   private boolean initIncludeValidator() {
     return findAnnotation(Valid.class) != null;
-  }
-
-  String getProduces() {
-    return produces;
   }
 
   TypeElement getBeanType() {
@@ -210,7 +182,6 @@ public class ControllerReader {
   }
 
   private void readMethod(ExecutableElement method, DeclaredType declaredType) {
-
     ExecutableType actualExecutable = null;
     if (declaredType != null) {
       // actual taking into account generics
@@ -232,14 +203,6 @@ public class ControllerReader {
     return methods;
   }
 
-  public String getPath() {
-    Path path = findAnnotation(Path.class);
-    if (path == null) {
-      return null;
-    }
-    return Util.trimPath(path.value());
-  }
-
   public void addImportType(String rawType) {
     importTypes.add(rawType);
   }
@@ -255,5 +218,4 @@ public class ControllerReader {
   public Set<String> getImportTypes() {
     return importTypes;
   }
-
 }

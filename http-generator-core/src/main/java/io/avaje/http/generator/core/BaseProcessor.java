@@ -4,6 +4,12 @@ import io.avaje.http.api.Controller;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.tags.Tags;
+import org.reflections.Reflections;
+import org.reflections.scanners.ResourcesScanner;
+import org.reflections.scanners.SubTypesScanner;
+import org.reflections.scanners.TypeAnnotationsScanner;
+import org.reflections.util.ClasspathHelper;
+import org.reflections.util.ConfigurationBuilder;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -11,9 +17,12 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+
 import java.io.IOException;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.net.*;
+import java.util.*;
+import java.util.regex.Pattern;
+
 
 public abstract class BaseProcessor extends AbstractProcessor {
 
@@ -45,19 +54,26 @@ public abstract class BaseProcessor extends AbstractProcessor {
 
   @Override
   public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
+    try {
+      if (ctx.isOpenApiAvailable()) {
+        readOpenApiDefinition(round);
+        readTagDefinitions(round);
+      }
 
-    if (ctx.isOpenApiAvailable()) {
-      readOpenApiDefinition(round);
-      readTagDefinitions(round);
+      Set<? extends Element> controllers = round.getElementsAnnotatedWith(Controller.class);
+      for (Element controller : controllers) {
+        writeControllerAdapter(controller);
+      }
+
+      if (round.processingOver()) {
+        addInheritedPackagesToOpenAPI();
+        writeOpenAPI();
+      }
     }
-
-    Set<? extends Element> controllers = round.getElementsAnnotatedWith(Controller.class);
-    for (Element controller : controllers) {
-      writeControllerAdapter(controller);
-    }
-
-    if (round.processingOver()) {
-      writeOpenAPI();
+    catch (Exception e) {
+      System.out.println(e.getMessage());
+      e.printStackTrace();
+      throw e;
     }
     return false;
   }
@@ -103,4 +119,28 @@ public abstract class BaseProcessor extends AbstractProcessor {
    */
   public abstract void writeControllerAdapter(ProcessingContext ctx, ControllerReader reader) throws IOException;
 
+  private void addInheritedPackagesToOpenAPI() {
+    List<URL> packages = new ArrayList<>();
+    for(URL url: ClasspathHelper.forClassLoader()) {
+      Reflections reflection = new Reflections(new ConfigurationBuilder().setUrls(url).setScanners(new ResourcesScanner()));
+
+      if(reflection.getResources(Pattern.compile(".*\\.BeanContextFactory")).size() > 0)
+        packages.add(url);
+    }
+
+    Reflections reflection = new Reflections(new ConfigurationBuilder().setUrls(packages).setScanners(new SubTypesScanner(), new TypeAnnotationsScanner()));
+    for(Class<?> taggedClasses: reflection.getTypesAnnotatedWith(Tag.class)) {
+      ctx.doc().addTagDefinition(taggedClasses.getAnnotation(Tag.class));
+    }
+
+    for(Class<?> taggedClasses: reflection.getTypesAnnotatedWith(Tags.class)) {
+      ctx.doc().addTagsDefinition(taggedClasses.getAnnotation(Tags.class));
+    }
+
+    for(Class<?> controller: reflection.getTypesAnnotatedWith(Controller.class)) {
+      ControllerClassReader reader = new ControllerClassReader(controller, ctx);
+      reader.read();
+      reader.buildApiDocumentation();
+    }
+  }
 }

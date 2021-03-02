@@ -1,8 +1,7 @@
 package io.avaje.http.generator.core.openapi;
 
 import io.avaje.http.api.MediaType;
-import io.avaje.http.generator.core.MethodParam;
-import io.avaje.http.generator.core.MethodReader;
+import io.avaje.http.generator.core.*;
 import io.avaje.http.generator.core.javadoc.Javadoc;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.models.Operation;
@@ -10,18 +9,19 @@ import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 
+import java.lang.reflect.ParameterizedType;
+
 /**
  * Build the OpenAPI documentation for a method.
  */
 public class MethodDocBuilder {
-
   private final Javadoc javadoc;
-  private final MethodReader methodReader;
+  private final BaseMethodReader methodReader;
   private final DocContext ctx;
 
   private final Operation operation = new Operation();
 
-  public MethodDocBuilder(MethodReader methodReader, DocContext ctx) {
+  public MethodDocBuilder(BaseMethodReader methodReader, DocContext ctx) {
     this.methodReader = methodReader;
     this.ctx = ctx;
     this.javadoc = methodReader.getJavadoc();
@@ -62,9 +62,15 @@ public class MethodDocBuilder {
         pathItem.setPatch(operation);
         break;
     }
-
-    for (MethodParam param : methodReader.getParams()) {
-      param.buildApiDocumentation(this);
+    if(methodReader instanceof MethodClassReader) {
+      for (BaseMethodParam param : ((MethodClassReader) methodReader).getParams()) {
+        param.buildApiDocumentation(this);
+      }
+    }
+    else {
+      for (BaseMethodParam param : ((MethodReader) methodReader).getParams()) {
+        param.buildApiDocumentation(this);
+      }
     }
 
     ApiResponses responses = new ApiResponses();
@@ -77,10 +83,18 @@ public class MethodDocBuilder {
       if (isEmpty(response.getDescription())) {
         response.setDescription("No content");
       }
-    } else {
+    }
+    else {
       final String produces = methodReader.getProduces();
       String contentMediaType = (produces == null) ? MediaType.APPLICATION_JSON : produces;
-      response.setContent(ctx.createContent(methodReader.getReturnType(), contentMediaType));
+      if(methodReader instanceof MethodClassReader) {
+        Class returnClass = ((MethodClassReader) methodReader).getReturnClass();
+        ParameterizedType returnType = ((MethodClassReader) methodReader).getReturnType();
+
+        response.setContent(ctx.createContent(returnClass, returnType, contentMediaType));
+      }
+      else
+        response.setContent(ctx.createContent(((MethodReader)methodReader).getReturnType(), contentMediaType));
     }
     responses.addApiResponse(methodReader.getStatusCode(), response);
   }
