@@ -8,6 +8,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
@@ -51,6 +52,23 @@ public class ProcessingContext {
 
   public void logError(Element e, String msg, Object... args) {
     messager.printMessage(Diagnostic.Kind.ERROR, String.format(msg, args), e);
+  }
+
+  public boolean isChildOrSameType(DeclaredType declaredType, Class superClass) {
+    TypeMirror superMirror = getTypeElement(superClass.getName()).asType();
+    if(types.isSameType(superMirror, declaredType)) {
+      return true;
+    }
+
+    for (TypeMirror supertype : types.directSupertypes(declaredType)) {
+      if(supertype.getKind() != TypeKind.DECLARED)
+        continue;
+
+      if(types.isSameType(superMirror, ((DeclaredType)supertype).asElement().asType())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

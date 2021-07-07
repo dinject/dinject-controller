@@ -214,6 +214,9 @@ class SchemaDocBuilder {
   private <T> void populateObjectSchema(TypeMirror objectType, Schema<T> objectSchema) {
     Element element = types.asElement(objectType);
     for (VariableElement field : allFields(element)) {
+      if(! field.getModifiers().contains(Modifier.PUBLIC))
+        continue;
+
       Schema<?> propSchema = toSchema(field.asType());
       if (isNotNullable(field)) {
         propSchema.setNullable(Boolean.FALSE);

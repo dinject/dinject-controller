@@ -1,6 +1,7 @@
 package io.avaje.http.generator.core.openapi;
 
 import io.avaje.http.api.MediaType;
+import io.avaje.http.api.StatusCode;
 import io.avaje.http.generator.core.MethodParam;
 import io.avaje.http.generator.core.MethodReader;
 import io.avaje.http.generator.core.javadoc.Javadoc;
@@ -9,6 +10,9 @@ import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
+
+import javax.lang.model.type.DeclaredType;
+import java.util.List;
 
 /**
  * Build the OpenAPI documentation for a method.
@@ -33,7 +37,6 @@ public class MethodDocBuilder {
       return;
     }
 
-    //operation.setOperationId();
     operation.setSummary(javadoc.getSummary());
     operation.setDescription(javadoc.getDescription());
     operation.setTags(methodReader.getTags());
@@ -83,6 +86,23 @@ public class MethodDocBuilder {
       response.setContent(ctx.createContent(methodReader.getReturnType(), contentMediaType));
     }
     responses.addApiResponse(methodReader.getStatusCode(), response);
+
+    addBadRequestResponses(responses);
+  }
+
+  private void addBadRequestResponses(ApiResponses apiResponses) {
+    List<DeclaredType> badRequestResponses = methodReader.getBadRequestResponses();
+    for(DeclaredType badRequestResponse: badRequestResponses) {
+      ApiResponse badRequestApiResponse = new ApiResponse();
+      badRequestApiResponse.setDescription(badRequestResponse.asElement().getSimpleName().toString());
+      badRequestApiResponse.setContent(ctx.createContent(badRequestResponse, MediaType.APPLICATION_JSON));
+
+      StatusCode statusCode = badRequestResponse.asElement().getAnnotation(StatusCode.class);
+      if(statusCode != null)
+        apiResponses.addApiResponse(Integer.toString(statusCode.value()), badRequestApiResponse);
+      else
+        apiResponses.addApiResponse("400", badRequestApiResponse);
+    }
   }
 
   DocContext getContext() {

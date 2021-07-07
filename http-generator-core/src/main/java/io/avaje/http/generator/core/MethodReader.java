@@ -7,6 +7,7 @@ import io.avaje.http.api.Patch;
 import io.avaje.http.api.Post;
 import io.avaje.http.api.Produces;
 import io.avaje.http.api.Put;
+import io.avaje.http.api.BadRequestResponse;
 import io.avaje.http.generator.core.javadoc.Javadoc;
 import io.avaje.http.generator.core.openapi.MethodDocBuilder;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tags;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -214,6 +216,22 @@ public class MethodReader {
 
   public String getProduces() {
     return produces;
+  }
+
+  public List<DeclaredType> getBadRequestResponses() {
+    List<DeclaredType> thrownTypes = new ArrayList<>();
+
+    for(TypeMirror thrownType : element.getThrownTypes()) {
+      if (thrownType.getKind() == TypeKind.DECLARED) {
+        DeclaredType declaredType = (DeclaredType) thrownType;
+
+        if(ctx.isChildOrSameType(declaredType, BadRequestResponse.class)) {
+          thrownTypes.add(declaredType);
+        }
+      }
+    }
+
+    return thrownTypes;
   }
 
   public TypeMirror getReturnType() {
